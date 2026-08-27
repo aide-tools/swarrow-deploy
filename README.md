@@ -1,4 +1,4 @@
-# Swarrow Deploy
+# Swarrow Deploy (GitHub Action)
 
 Swarrow Deploy is a step-level GitHub Action that submits an immutable container image digest to a [Swarrow](https://github.com/aide-tools/swarrow) deployment relay. It obtains a short-lived GitHub Actions OIDC token, waits for Swarrow's restart authentication window when necessary and treats only a completed deployment as success.
 
