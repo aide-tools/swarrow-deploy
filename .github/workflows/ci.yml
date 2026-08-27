@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Test action
+        run: node --test
+
+  diagnostic:
+    name: Exercise diagnostic mode
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run diagnostic action
+        id: diagnostic
+        continue-on-error: true
+        uses: ./
+        with:
+          url: https://deploy.example.net
+          audience: https://deploy.example.net
+          deployment: example-web
+          digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          debug: true
+
+      - name: Confirm intentional failure
+        env:
+          DIAGNOSTIC: ${{ steps.diagnostic.outputs.diagnostic }}
+          OUTCOME: ${{ steps.diagnostic.outcome }}
+        run: |
+          test "${OUTCOME}" = failure
+          test "${DIAGNOSTIC}" = true
+
+  lint-workflows:
+    name: Lint workflows
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.26.4
+          cache: false
+
+      - name: Lint workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
