@@ -1,0 +1,33 @@
+name: Swarrow Deploy
+description: Deploy an immutable container image digest through Swarrow
+author: aide-tools
+
+branding:
+  icon: upload-cloud
+  color: blue
+
+inputs:
+  url:
+    description: Base URL of the Swarrow server
+    required: true
+  audience:
+    description: Audience to request in the GitHub OIDC token
+    required: true
+  deployment:
+    description: Swarrow deployment policy name
+    required: true
+  digest:
+    description: Immutable sha256 image digest to deploy
+    required: true
+  debug:
+    description: Report safe OIDC claims and fail without contacting Swarrow
+    required: false
+    default: "false"
+
+outputs:
+  diagnostic:
+    description: Whether debug mode reported the OIDC identity before its intentional failure
+
+runs:
+  using: node24
+  main: deploy/index.mjs
