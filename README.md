@@ -70,11 +70,52 @@ Normal deployment failures also report the same allowlisted identity claims. The
 
 The action:
 
-- accepts only `200 OK` as success
-- treats `202 Accepted` as failure because Swarrow stopped observing while the rollout remained in progress
-- retries `authentication_warming_up` once after the server-provided `Retry-After` delay
-- obtains a new OIDC token before that retry
-- prints Swarrow's response body for the workflow log
+- Accepts only `200 OK` with `conclusion: completed` as success
+- Treats `202 Accepted` as failure because Swarrow stopped observing while the rollout remained in progress
+- Retries `authentication_warming_up` once after the server-provided `Retry-After` delay
+- Obtains a new OIDC token before that retry
+- Prints Swarrow's response body for the workflow log
+
+## Migration jobs
+
+Configure a separate Swarrow deployment with `target.mode: job` for the existing migration job. The action uses the same inputs and digest-only request for both jobs and services; the server configuration selects the behaviour.
+
+Run migrations before deploying the web service, using the same published digest in both steps:
+
+```yaml
+jobs:
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      id-token: write
+    concurrency:
+      group: production-release
+      cancel-in-progress: false
+    steps:
+      - name: Run migrations
+        uses: aide-tools/swarrow-deploy@<full-commit-sha>
+        with:
+          url: https://deploy.example.net
+          audience: https://deploy.example.net
+          deployment: example-migrate
+          digest: ${{ needs.publish.outputs.digest }}
+      - name: Deploy web service
+        uses: aide-tools/swarrow-deploy@<full-commit-sha>
+        with:
+          url: https://deploy.example.net
+          audience: https://deploy.example.net
+          deployment: example-web
+          digest: ${{ needs.publish.outputs.digest }}
+```
+
+The `publish` job supplies the image digest. Keep the web step's default success condition: a failed or unfinished migration must block deployment. Set the job timeout to allow both requests to finish. The concurrency group keeps migrations and deployment together; use the same group for workflows that release to the same environment. Concurrency does not guarantee release order, so do not rerun an obsolete release.
+
+When the migration job already uses the requested image, Swarrow observes its existing run without restarting it. A failed run stays failed. A timeout or lost connection leaves the result unknown and does not stop the migration. The action fails on that outcome; it does not automatically retry the deployment. Retrying the same digest observes the run while that image remains current, but may run the old image again if another release has replaced it.
+
+Job targets require a Swarrow server with job support. See the [migration job example](https://github.com/aide-tools/swarrow/blob/main/docs/design.md#example-migration-job) for provisioning. Creating the Swarm job runs it immediately, so its initial image must be safe to run.
 
 ## Version pinning
 

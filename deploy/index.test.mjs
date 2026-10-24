@@ -191,3 +191,48 @@ test("plain HTTP is rejected before requesting a token", async () => {
   );
   assert.equal(called, false);
 });
+
+for (const action of ["updated", "no_change"]) {
+  test(`migration ${action} uses the digest-only endpoint`, async () => {
+    const requests = [];
+    await run({
+      environment: environment({ INPUT_DEPLOYMENT: "example-migrate" }),
+      fetchImpl: async (url, options = {}) => {
+        requests.push({ url: String(url), options });
+        return options.method === "POST"
+          ? Response.json({ action, conclusion: "completed" })
+          : oidcResponse(token({ repository_id: "123456789" }));
+      },
+    });
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1].url, "https://deploy.example.net/v1/deployments/example-migrate");
+    assert.deepEqual(JSON.parse(requests[1].options.body), { digest });
+  });
+}
+
+for (const [status, body] of [
+  [200, "not JSON"],
+  [200, "null"],
+  [200, '{}'],
+  [200, '{"action":"no_change","conclusion":"failed"}'],
+  [202, '{"conclusion":"in_progress"}'],
+  [409, '{"conclusion":"superseded"}'],
+  [409, '{"error":{"code":"job_busy"}}'],
+  [502, '{"conclusion":"failed"}'],
+  [504, '{"error":{"code":"request_timeout"}}'],
+]) {
+  test(`migration stops on HTTP ${status}: ${body}`, async () => {
+    let calls = 0;
+    await assert.rejects(run({
+      environment: environment({ INPUT_DEPLOYMENT: "example-migrate" }),
+      identityReporter: () => {},
+      fetchImpl: async (_url, options = {}) => {
+        calls++;
+        return options.method === "POST"
+          ? new Response(body, { status })
+          : oidcResponse(token({ repository_id: "123456789" }));
+      },
+    }), status === 200 ? /did not confirm deployment completion/ : /Swarrow concluded with HTTP/);
+    assert.equal(calls, 2);
+  });
+}

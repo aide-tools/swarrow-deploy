@@ -123,12 +123,11 @@ const deploymentURL = (base, deployment) => {
   return url;
 };
 
-const responseErrorCode = (body) => {
+const parseResponse = (body) => {
   try {
-    const parsed = JSON.parse(body);
-    return typeof parsed?.error?.code === "string" ? parsed.error.code : "";
+    return JSON.parse(body);
   } catch {
-    return "";
+    return null;
   }
 };
 
@@ -186,13 +185,18 @@ export const run = async ({
     const body = await response.text();
     process.stdout.write(`${body}\n`);
 
+    const result = parseResponse(body);
     if (response.status === 200) {
-      return;
+      if (result?.conclusion === "completed") {
+        return;
+      }
+      identityReporter(token, response.status);
+      throw new Error("Swarrow did not confirm deployment completion");
     }
 
     const retryableWarmup =
       response.status === 503 &&
-      responseErrorCode(body) === "authentication_warming_up" &&
+      result?.error?.code === "authentication_warming_up" &&
       attempt < 2;
     if (retryableWarmup) {
       const delay = retryDelay(response);
